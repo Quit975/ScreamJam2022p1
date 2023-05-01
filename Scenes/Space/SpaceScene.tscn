@@ -2,7 +2,7 @@
 
 [ext_resource type="Texture2D" uid="uid://bvkkk5tors00i" path="res://Scenes/Space/2k_stars_milky_way.jpg" id="1_1ckod"]
 [ext_resource type="Texture2D" uid="uid://cf2t44tmo1nix" path="res://Scenes/Space/2k_moon.jpg" id="2_pm867"]
-[ext_resource type="PackedScene" uid="uid://veohjciro1nh" path="res://Scenes/Player/Player.tscn" id="3_oiirv"]
+[ext_resource type="PackedScene" uid="uid://cggvevxobaucf" path="res://Scenes/Station/Station.tscn" id="3_m3tvt"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_wen6i"]
 panorama = ExtResource("1_1ckod")
@@ -15,19 +15,28 @@ sky_material = SubResource("PanoramaSkyMaterial_wen6i")
 background_mode = 2
 sky = SubResource("Sky_248vs")
 sky_rotation = Vector3(-1.00007, 1.70344, 1.15017)
+ssao_enabled = true
+ssil_enabled = true
+sdfgi_enabled = true
+sdfgi_read_sky_light = false
+sdfgi_min_cell_size = 0.0488281
 glow_enabled = true
 glow_normalized = true
-glow_intensity = 0.1
-glow_strength = 2.0
-glow_bloom = 0.05
-glow_blend_mode = 1
+glow_bloom = 0.01
+glow_blend_mode = 0
 
 [sub_resource type="GDScript" id="GDScript_4ow0g"]
 resource_name = "MoonOrbiter"
 script/source = "extends Node3D
 
 @onready var Moon : Node3D = $Moon as Node3D;
-const rotation_speed : float = 0.02;
+const rotation_speed : float = 0.05;
+
+signal sun_dawn;
+signal sun_set;
+var _is_sun_visible : bool = true;
+const sun_dawn_value : float = 122.0;
+const sun_set_value : float = 40.0;
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
@@ -38,33 +47,61 @@ func _ready():
 func _process(delta):
 	rotate_y(rotation_speed * delta);
 	Moon.rotate_y(-rotation_speed * delta);
-	pass
+	
+	if _is_sun_visible:
+		if rotation_degrees.y > sun_set_value and rotation_degrees.y < sun_dawn_value:
+			_is_sun_visible = false;
+			emit_signal('sun_set');
+	else:
+		if rotation_degrees.y > sun_dawn_value:
+			_is_sun_visible = true;
+			emit_signal('sun_dawn');
 "
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_h7n72"]
 albedo_texture = ExtResource("2_pm867")
 texture_filter = 0
+disable_receive_shadows = true
 
 [sub_resource type="SphereMesh" id="SphereMesh_6awp7"]
 material = SubResource("StandardMaterial3D_h7n72")
 radius = 100.0
 height = 200.0
 
+[sub_resource type="SphereOccluder3D" id="SphereOccluder3D_twvyh"]
+radius = 100.0
+
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rk7bd"]
 emission_enabled = true
 emission = Color(1, 0.976471, 0.823529, 1)
-emission_energy_multiplier = 8.0
+emission_energy_multiplier = 12.57
 
 [sub_resource type="SphereMesh" id="SphereMesh_u7657"]
 material = SubResource("StandardMaterial3D_rk7bd")
 radius = 10.0
 height = 20.0
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_3llv6"]
-size = Vector3(5, 1, 5)
+[sub_resource type="GDScript" id="GDScript_i4w4t"]
+resource_name = "Sun"
+script/source = "extends MeshInstance3D
 
-[sub_resource type="BoxMesh" id="BoxMesh_ebo1r"]
-size = Vector3(5, 1, 5)
+@onready var SunLight : DirectionalLight3D = $DirectionalLight3D as DirectionalLight3D;
+
+# Called when the node enters the scene tree for the first time.
+func _ready():
+	var MoonRoot : Node3D = get_tree().root.get_node(\"Node3D/MoonRoot\");
+	if MoonRoot:
+		MoonRoot.connect('sun_dawn', on_sun_dawn);
+		MoonRoot.connect('sun_set', on_sun_set);
+
+func on_sun_dawn():
+	var tween = get_tree().create_tween();
+	tween.tween_property(SunLight, \"light_energy\", 1.0, 5.0);
+	
+func on_sun_set():
+	var tween = get_tree().create_tween();
+	tween.tween_property(SunLight, \"light_energy\", 0.0, 5.0);
+"
 
 [node name="Node3D" type="Node3D"]
 
@@ -72,7 +109,7 @@ size = Vector3(5, 1, 5)
 environment = SubResource("Environment_7gwxt")
 
 [node name="MoonRoot" type="Node3D" parent="."]
-transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, 0, 0, 0)
+transform = Transform3D(0.979163, 0, 0.203078, 0, 1, 0, -0.203078, 0, 0.979163, 0, 0, 0)
 script = SubResource("GDScript_4ow0g")
 
 [node name="Moon" type="MeshInstance3D" parent="MoonRoot"]
@@ -80,25 +117,21 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -148.026)
 mesh = SubResource("SphereMesh_6awp7")
 skeleton = NodePath("../../Space")
 
+[node name="OccluderInstance3D" type="OccluderInstance3D" parent="MoonRoot/Moon"]
+transform = Transform3D(1, 0, 2.98023e-08, 0, 1, 0, -2.98023e-08, 0, 1, 0, 0, 0)
+occluder = SubResource("SphereOccluder3D_twvyh")
+
 [node name="Sun" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1070.83, 0, 0)
 cast_shadow = 0
 mesh = SubResource("SphereMesh_u7657")
+script = SubResource("GDScript_i4w4t")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="Sun"]
-transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 17.1525, 0, 0)
+transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 17.1525, 314.585, 0)
+light_bake_mode = 1
 shadow_enabled = true
+directional_shadow_mode = 0
 
-[node name="StaticBody3D" type="StaticBody3D" parent="."]
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D"]
-transform = Transform3D(0.996655, -0.0817298, 0, 0.0817298, 0.996655, 0, 0, 0, 1, 0, -1.28456, 0)
-shape = SubResource("BoxShape3D_3llv6")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="StaticBody3D"]
-transform = Transform3D(0.996655, -0.0817298, 0, 0.0817298, 0.996655, 0, 0, 0, 1, 0, -1.28456, 0)
-mesh = SubResource("BoxMesh_ebo1r")
-skeleton = NodePath("../..")
-
-[node name="CharacterBody3D" parent="." instance=ExtResource("3_oiirv")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.217428, -0.800707, 0.390342)
+[node name="SpaceStation" parent="." instance=ExtResource("3_m3tvt")]
+transform = Transform3D(-4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)

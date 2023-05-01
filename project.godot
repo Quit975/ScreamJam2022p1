@@ -70,7 +70,15 @@ look_right={
 ]
 }
 
+[physics]
+
+3d/default_gravity_vector=Vector3(1, 0, 0)
+
 [player]
 
 mouse_look_sensitivity=0.3
 gamepad_look_sensitivity=3.0
+
+[rendering]
+
+occlusion_culling/use_occlusion_culling=true

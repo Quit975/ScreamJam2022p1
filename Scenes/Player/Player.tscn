@@ -1,10 +1,11 @@
-[gd_scene load_steps=3 format=3 uid="uid://veohjciro1nh"]
+[gd_scene load_steps=4 format=3 uid="uid://veohjciro1nh"]
 
 [sub_resource type="GDScript" id="GDScript_js7in"]
 resource_name = "Player"
 script/source = "extends CharacterBody3D
 
 @onready var CameraPivot : Node3D = $CollisionShape3D/CameraPivot as Node3D;
+@onready var FootstepPlayer = $FootstepPlayer;
 
 signal footstep;
 
@@ -40,7 +41,7 @@ func _input(event):
 # Movement
 func process_movement(delta : float):
 	if not is_on_floor():
-		velocity.y -= gravity * delta
+		velocity.x += gravity * delta
 
 	# Get the input direction and handle the movement/deceleration.
 	var input_dir : Vector2 = Input.get_vector(
@@ -57,17 +58,18 @@ func process_movement(delta : float):
 		direction = direction.normalized()
 		
 	if direction:
-		velocity.x = direction.x * SPEED
+		velocity.y = direction.x * SPEED
 		velocity.z = direction.z * SPEED
 	else:
-		velocity.x = move_toward(velocity.x, 0, SPEED)
+		velocity.y = move_toward(velocity.y, 0, SPEED)
 		velocity.z = move_toward(velocity.z, 0, SPEED)
 
 	travelled_distance += (previous_position - position).length();
 	
-	if travelled_distance >= SPEED / 1.3:
+	if travelled_distance >= SPEED / 1.6:
 		travelled_distance = 0.0;
 		emit_signal(\"footstep\");
+		FootstepPlayer.play_footstep();
 		
 	previous_position = position;
 
@@ -116,6 +118,55 @@ func handle_action_input(action : StringName):
 radius = 0.3
 height = 1.7
 
+[sub_resource type="GDScript" id="GDScript_p8rxf"]
+script/source = "extends Node3D
+
+var metal_footsteps : Array[Resource] = [];
+var glass_footsteps : Array[Resource] = [];
+var rng = RandomNumberGenerator.new();
+
+@onready var raycast : RayCast3D = $RayCast3D;
+@onready var sound_player : AudioStreamPlayer3D = $AudioPlayer;
+
+enum FootstepType {
+	METAL,
+	GLASS
+}
+
+func _ready():
+	rng.randomize();
+	metal_footsteps.append(preload(\"res://Scenes/Player/Audio/footsteps/metal_1.wav\"));
+	metal_footsteps.append(preload(\"res://Scenes/Player/Audio/footsteps/metal_2.wav\"));
+	metal_footsteps.append(preload(\"res://Scenes/Player/Audio/footsteps/metal_3.wav\"));
+	metal_footsteps.append(preload(\"res://Scenes/Player/Audio/footsteps/metal_4.wav\"));
+	metal_footsteps.append(preload(\"res://Scenes/Player/Audio/footsteps/metal_5.wav\"));
+	
+	glass_footsteps.append(preload(\"res://Scenes/Player/Audio/footsteps/glass_1.wav\"));
+
+
+func play_footstep():
+	var collider : StaticBody3D = raycast.get_collider() as StaticBody3D;
+	if collider:
+		var floor : MeshInstance3D = collider.get_parent() as MeshInstance3D;
+		var type : FootstepType;
+		if floor:
+			match floor.mesh.get_surface_count():
+				1: type = FootstepType.METAL;
+				2: type = FootstepType.GLASS;
+		
+		match type:
+			FootstepType.METAL:
+				metal_footsteps.shuffle();
+				sound_player.stream = metal_footsteps.front();
+			FootstepType.GLASS:
+				glass_footsteps.shuffle();
+				sound_player.stream = glass_footsteps.front();
+				
+		sound_player.pitch_scale = rng.randf_range(0.8, 1.2);
+		sound_player.volume_db = 0.15;
+		sound_player.play();
+"
+
 [node name="CharacterBody3D" type="CharacterBody3D"]
 script = SubResource("GDScript_js7in")
 
@@ -127,3 +178,12 @@ shape = SubResource("CapsuleShape3D_add0j")
 
 [node name="Camera3D" type="Camera3D" parent="CollisionShape3D/CameraPivot"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.643579, 0)
+
+[node name="FootstepPlayer" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.0646665, 0)
+script = SubResource("GDScript_p8rxf")
+
+[node name="RayCast3D" type="RayCast3D" parent="FootstepPlayer"]
+target_position = Vector3(0, -0.5, 0)
+
+[node name="AudioPlayer" type="AudioStreamPlayer3D" parent="FootstepPlayer"]
